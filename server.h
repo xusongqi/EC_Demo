@@ -11,32 +11,32 @@
 #ifndef _SERVER_H_
 #define _SERVER_H_
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <linux/in.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <time.h>
+#include "EC_include.h"
 
 #define LENGTH 1024
 
-void tcp_server();
+char * server_time();
+
+char * server_time()
+{
+	time_t rawtime;//服务器时间
+	struct tm * server_time;
+	time(&rawtime);
+	server_time = localtime(&rawtime);
+	return asctime(server_time);
+}
 
 void tcp_server()
 {
-	/*描述符*/
-	int sfp,//接受所有连接请求	
-		nfp;//处理单独的客户请求
+	int listen_fd,//描述符：接受所有连接请求	
+		server_fd;//描述符：处理单独的客户请求
 	struct sockaddr_in server_addr,//服务端地址
 					   client_addr;//客户端地址
 	int sin_size;//地址长度
 	unsigned short portnum = 21567;//服务器使用端口
-	char server_msg[LENGTH];
-	
-	//read()相关变量
-	char buffer[LENGTH];//存储read()收到的信息
-	int recbytes;//	计数buffer收到的字节数
+	char server_msg[LENGTH];//发送内容长度[write()]
+	char buffer[LENGTH];//存储收到的信息[read()]
+	int recbytes;//	计数buffer收到的字节数[read()]
 
 	/*设置监听的端口和IP信息*/
 	bzero(&server_addr, sizeof(struct sockaddr_in));
@@ -45,9 +45,9 @@ void tcp_server()
 	server_addr.sin_port=htons(portnum);
 
 	/*socket() */
-	sfp = socket(AF_INET, SOCK_STREAM,0);
-	setsockopt(sfp, SOL_SOCKET, SO_REUSEADDR, NULL, 1);//端口复用
-	if(sfp == -1)
+	listen_fd = socket(AF_INET, SOCK_STREAM,0);
+	setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, NULL, 1);//端口复用,最后两个参数常用opt=1和sizeof(opt)
+	if(listen_fd == -1)
 	{
 		printf("SOCKET FAILED\n");
 		exit(1);
@@ -55,7 +55,7 @@ void tcp_server()
 	printf("socket ok... ");
 
 	/*bind() */
-	if(-1 == bind(sfp,(struct sockaddr *)(&server_addr),sizeof(struct sockaddr)))
+	if(-1 == bind(listen_fd,(struct sockaddr *)(&server_addr),sizeof(struct sockaddr)))
 	{
 		printf("BIND FAILED\n");
 		exit(1);
@@ -63,7 +63,7 @@ void tcp_server()
 	printf("bind ok... \n");
 
 	/*listen() */
-	if(-1 == listen(sfp,5))
+	if(-1 == listen(listen_fd,5))
 	{
 		printf("LISTEN FAILED\n");
 		exit(1);
@@ -76,7 +76,7 @@ void tcp_server()
 	while(1)
 	{
 		/*accept() */
-		if(-1 == (nfp = accept(sfp,(struct sockaddr *)(&client_addr),&sin_size)))
+		if(-1 == (server_fd = accept(listen_fd,(struct sockaddr *)(&client_addr),&sin_size)))
 		{
 			printf("ACCEPT FAILED\n");
 			exit(1);
@@ -88,31 +88,33 @@ void tcp_server()
 		/*单个客户连接子进程*/
 		if(fork() == 0)
 		{
-			close(sfp);
+			close(listen_fd);
 			/*read() 接收消息*/
 			while(1)
 			{
-				if( (recbytes = read(nfp,buffer,LENGTH)) <= 0)
+				if( (recbytes = read(server_fd,buffer,LENGTH)) <= 0)
 				{
 					break;
 				}
 				buffer[recbytes]='\0';
 				printf("%s    ",buffer);
-				printf("    【READ SUCCESS】\n");
+				printf("from %#x : %#x : ",ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
+				printf("%s\n",server_time());
 			}
 
-			close(nfp);
-			printf(" server disconnected from %#x : %#x\n",
+			close(server_fd);
+			printf(" server disconnected from %#x : %#x : ",
 					ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
-			exit(0);	//防止子进程进入外循环接受sfp;
-		}//[nfp子进程]结束
+			printf("%s\n",server_time());
+			exit(0);	//防止子进程进入外循环接受listen_fd;
+		}//[server_fd子进程]结束
 		
 		/*父服务进程*/
 		else
 		{
-			close(nfp);
+			close(server_fd);
 		}
 	}//[while大循环]结束
-	close(sfp);
+	close(listen_fd);
 }
 #endif
