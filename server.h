@@ -13,9 +13,11 @@
 
 #include "EC_include.h"
 
-#define LENGTH 1024
+#define	LENGTH		1024
+#define	MAXEVENTS	1024
 
-char * server_time();
+char *	server_time();					//返回服务器的本地时间
+int		set_non_blocking(int sockfd);	//将传入的描述符设置为非阻塞
 
 char * server_time()
 {
@@ -26,20 +28,67 @@ char * server_time()
 	return asctime(server_time);
 }
 
+int	set_non_blocking(int sockfd)
+{
+	/* 内层调用fcntl()的F_GETFL获取flag，
+	 * 外层fcntl()将获取到的flag设置为O_NONBLOCK非阻塞*/
+	if( fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) ) == -1)
+	{	return -1;}
+	return 0;
+}
+
+int client_request(int client_fd)
+{
+	int recbytes;//	计数buffer收到的字节数[read()]
+	char buffer[LENGTH];//存储收到的信息[read()]
+	char server_msg[LENGTH];//发送内容长度[write()]
+	struct sockaddr_in client_addr;//客户端地址[包括ip与端口]
+
+	/*获取对端ip与端口信息*/
+	int len=sizeof(client_addr);
+	getpeername( client_fd, (struct sockaddr *)&client_addr,&len );
+	/*read() 收取数据*/
+	recbytes = read(client_fd,buffer,LENGTH);
+
+	/* 当recbytes > 0，正常
+	 * 当recbytes = -1，且errno = 11，正常
+	 * 其他情况：关闭*/
+	if(recbytes > 0)//当然还有[recbytes <0 && errno == EAGAIN]的情况，但不会被epoll_wait()返回到get_act_fds
+	{
+		buffer[recbytes]='\0';
+		printf("%s    ",buffer);
+		printf("from %#x : %#x : ",
+					ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
+		printf("%s\n",server_time());
+	}
+	else
+	{
+		/*输出断开连接的时间*/
+		printf(" server disconnected from %#x : %#x : ",
+					ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
+		printf("%s\n",server_time());
+		close(client_fd);
+		return -1;
+	}
+}
+
 void tcp_server()
 {
-	int listen_fd,//描述符：接受所有连接请求	
-		server_fd;//描述符：处理单独的客户请求
+	int listen_fd,		//描述符：接受所有连接请求	
+		client_fd,		//描述符：处理单独的客户请求
+		epoll_fd,		//描述符：epoll
+		get_act_fds,	//epoll_wait()返回的事件描述符数量
+		count_fds = 0;	//epoll监控描述符计数器
 	struct sockaddr_in server_addr,//服务端地址
 					   client_addr;//客户端地址
-	int sin_size;//地址长度
 	unsigned short portnum = 21567;//服务器使用端口
-	char server_msg[LENGTH];//发送内容长度[write()]
-	char buffer[LENGTH];//存储收到的信息[read()]
-	int recbytes;//	计数buffer收到的字节数[read()]
+	int sin_size;//sockaddr_in的地址长度
+	struct epoll_event	event_act,//要监听的描述符的动作
+						events[MAXEVENTS];//epoll事件队列
 
 	/*设置监听的端口和IP信息*/
-	bzero(&server_addr, sizeof(struct sockaddr_in));
+	//bzero(&server_addr, sizeof(struct sockaddr_in));
+	memset(&server_addr, sizeof(struct sockaddr_in),'\0');
 	server_addr.sin_family=AF_INET;
 	server_addr.sin_addr.s_addr=htonl(INADDR_ANY);
 	server_addr.sin_port=htons(portnum);
@@ -71,49 +120,77 @@ void tcp_server()
 	printf("listen ok...");
 	
 	sin_size = sizeof(struct sockaddr_in);
-	
-	/*开启服务*/
+
+	/*epoll_create() */
+	epoll_fd = epoll_create(MAXEVENTS);
+	event_act.events = EPOLLIN | EPOLLET;//可读检测 + 边缘触发
+	event_act.data.fd = listen_fd;//设置新事件为监听描述符
+
+	/*epoll_ctl() 描述符加入监听队列*/
+	if( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &event_act) < 0 )
+	{
+		printf("EPOLL_CTL FAILED\n");
+		exit(1);
+	}
+	count_fds++;
+
+
+	/*开始循环监听 */
 	while(1)
 	{
-		/*accept() */
-		if(-1 == (server_fd = accept(listen_fd,(struct sockaddr *)(&client_addr),&sin_size)))
+		get_act_fds = epoll_wait(epoll_fd, events, count_fds, -1);
+		//printf("sdklskdlskdl: %d\n",get_act_fds);
+		if(get_act_fds == -1)
 		{
-			printf("ACCEPT FAILED\n");
-			exit(1);
+			printf("EPOLL_WAIT FAILED\n");
+			continue;
 		}
-		/*输出目标的ip和端口*/
-		printf("accept ok... \nserver start get connect from %#x : %#x\n",
-					ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
-
-		/*单个客户连接子进程*/
-		if(fork() == 0)
+		for(int i = 0; i < get_act_fds; i++)
 		{
-			close(listen_fd);
-			/*read() 接收消息*/
-			while(1)
+			if(events[i].data.fd == listen_fd)
 			{
-				if( (recbytes = read(server_fd,buffer,LENGTH)) <= 0)
+				/*accept() */
+				if(-1 == (client_fd = accept(listen_fd,(struct sockaddr *)(&client_addr),&sin_size)))
 				{
-					break;
+					printf("ACCEPT FAILED\n");
+					continue;
 				}
-				buffer[recbytes]='\0';
-				printf("%s    ",buffer);
-				printf("from %#x : %#x : ",ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
-				printf("%s\n",server_time());
+				/*输出连接客户的ip和端口*/
+				printf("accept ok... \nserver start get connect from %#x : %#x\n",
+							ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
+				/*如果当前epoll内描述符队列已满*/
+				if(count_fds >= MAXEVENTS)
+				{
+					printf("TOO MANY CONNECTIONS\n");
+					continue;
+				}
+				/*设置非阻塞io*/
+				if( set_non_blocking(client_fd) != 0 )
+				{
+					printf("SET_NON_BLOCKING FAILED\n");
+					close(client_fd);
+					continue;
+				}
+				/*设置epoll对该描述符的监听模式*/
+				event_act.events = EPOLLIN | EPOLLET;
+				event_act.data.fd = client_fd;
+				/*epoll_ctl() 描述符加入监听队列*/
+				if( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &event_act) <0 )
+				{
+					printf("EPOLL_CTL ADD CLIENT FAILED\n");
+					close(client_fd);
+					continue;
+				}
+				count_fds++;
+				continue;
+			}//[if(events[i] == listen_fd)]结束
+			/*处理客户请求，若连接断开则从epoll监听队列中删除该描述符*/
+			if(client_request(client_fd) < 0)
+			{
+				epoll_ctl(epoll_fd, EPOLL_CTL_DEL, events[i].data.fd, &event_act);
+				count_fds--;
 			}
-
-			close(server_fd);
-			printf(" server disconnected from %#x : %#x : ",
-					ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
-			printf("%s\n",server_time());
-			exit(0);	//防止子进程进入外循环接受listen_fd;
-		}//[server_fd子进程]结束
-		
-		/*父服务进程*/
-		else
-		{
-			close(server_fd);
-		}
+		}//[for(i = 0; i < get_act_fds; i++)]结束
 	}//[while大循环]结束
 	close(listen_fd);
 }
