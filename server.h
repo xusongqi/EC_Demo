@@ -18,6 +18,7 @@
 
 char *	server_time();					//返回服务器的本地时间
 int		set_non_blocking(int sockfd);	//将传入的描述符设置为非阻塞
+int client_request(int client_fd);		//处理客户请求
 
 char * server_time()
 {
@@ -48,7 +49,7 @@ int client_request(int client_fd)
 	int len=sizeof(client_addr);
 	getpeername( client_fd, (struct sockaddr *)&client_addr,&len );
 	/*read() 收取数据*/
-	recbytes = read(client_fd,buffer,LENGTH);
+	recbytes = read(client_fd, buffer, LENGTH);
 
 	/* 当recbytes > 0，正常
 	 * 当recbytes = -1，且errno = 11，正常
@@ -60,6 +61,7 @@ int client_request(int client_fd)
 		printf("from %#x : %#x : ",
 					ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
 		printf("%s\n",server_time());
+		return 0;
 	}
 	else
 	{
@@ -99,6 +101,7 @@ void tcp_server()
 	if(listen_fd == -1)
 	{
 		printf("SOCKET FAILED\n");
+		//return 1;
 		exit(1);
 	}
 	printf("socket ok... ");
@@ -107,6 +110,7 @@ void tcp_server()
 	if(-1 == bind(listen_fd,(struct sockaddr *)(&server_addr),sizeof(struct sockaddr)))
 	{
 		printf("BIND FAILED\n");
+		//return 1;
 		exit(1);
 	}
 	printf("bind ok... \n");
@@ -115,6 +119,7 @@ void tcp_server()
 	if(-1 == listen(listen_fd,5))
 	{
 		printf("LISTEN FAILED\n");
+		//return 1;
 		exit(1);
 	}
 	printf("listen ok...");
@@ -130,6 +135,7 @@ void tcp_server()
 	if( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &event_act) < 0 )
 	{
 		printf("EPOLL_CTL FAILED\n");
+		//return 1;
 		exit(1);
 	}
 	count_fds++;
@@ -138,6 +144,7 @@ void tcp_server()
 	/*开始循环监听 */
 	while(1)
 	{
+		/*epoll_wait() 最后一个参数-1时，当描述符可读则立即返回*/
 		get_act_fds = epoll_wait(epoll_fd, events, count_fds, -1);
 		//printf("sdklskdlskdl: %d\n",get_act_fds);
 		if(get_act_fds == -1)
@@ -185,7 +192,7 @@ void tcp_server()
 				continue;
 			}//[if(events[i] == listen_fd)]结束
 			/*处理客户请求，若连接断开则从epoll监听队列中删除该描述符*/
-			if(client_request(client_fd) < 0)
+			else if(client_request(events[i].data.fd) < 0)
 			{
 				epoll_ctl(epoll_fd, EPOLL_CTL_DEL, events[i].data.fd, &event_act);
 				count_fds--;
