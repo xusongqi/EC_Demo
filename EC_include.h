@@ -12,19 +12,26 @@
 #ifndef _EC_INCLUDE_
 #define _EC_INCLUDE_
 
+#include <errno.h>
+#include <fcntl.h>
+//#include <linux/in.h>
+#include <mysql/mysql.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <linux/in.h>
+#include <unistd.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <time.h>
-#include <mysql/mysql.h>
 
 #define true 1
 #define false 0
 
-void tcp_server();
+typedef int Status;
+
+int tcp_server();
 int database();
 
 #endif
