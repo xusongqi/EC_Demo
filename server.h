@@ -18,7 +18,7 @@
 
 char *	server_time();					//返回服务器的本地时间
 int		set_non_blocking(int sockfd);	//将传入的描述符设置为非阻塞
-int client_request(int client_fd);		//处理客户请求
+int		client_request(int client_fd);		//处理客户请求
 
 char * server_time()
 {
@@ -74,7 +74,7 @@ int client_request(int client_fd)
 	}
 }
 
-void tcp_server()
+int tcp_server()
 {
 	int listen_fd,		//描述符：接受所有连接请求	
 		client_fd,		//描述符：处理单独的客户请求
@@ -100,27 +100,30 @@ void tcp_server()
 	setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, NULL, 1);//端口复用,最后两个参数常用opt=1和sizeof(opt)
 	if(listen_fd == -1)
 	{
-		printf("SOCKET FAILED\n");
-		//return 1;
-		exit(1);
+		printf("SOCKET FAILED    ");
+		printf("%s",server_time());
+		return 1;
+		//exit(1);
 	}
 	printf("socket ok... ");
 
 	/*bind() */
 	if(-1 == bind(listen_fd,(struct sockaddr *)(&server_addr),sizeof(struct sockaddr)))
 	{
-		printf("BIND FAILED\n");
-		//return 1;
-		exit(1);
+		printf("BIND FAILED    ");
+		printf("%s",server_time());
+		return 1;
+		//exit(1);
 	}
 	printf("bind ok... \n");
 
 	/*listen() */
 	if(-1 == listen(listen_fd,5))
 	{
-		printf("LISTEN FAILED\n");
-		//return 1;
-		exit(1);
+		printf("LISTEN FAILED    ");
+		printf("%s",server_time());
+		return 1;
+		//exit(1);
 	}
 	printf("listen ok...");
 	
@@ -134,9 +137,10 @@ void tcp_server()
 	/*epoll_ctl() 描述符加入监听队列*/
 	if( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &event_act) < 0 )
 	{
-		printf("EPOLL_CTL FAILED\n");
-		//return 1;
-		exit(1);
+		printf("EPOLL_CTL FAILED    ");
+		printf("%s",server_time());
+		return 1;
+		//exit(1);
 	}
 	count_fds++;
 
@@ -149,7 +153,8 @@ void tcp_server()
 		//printf("sdklskdlskdl: %d\n",get_act_fds);
 		if(get_act_fds == -1)
 		{
-			printf("EPOLL_WAIT FAILED\n");
+			printf("EPOLL_WAIT FAILED    ");
+			printf("%s",server_time());
 			continue;
 		}
 		for(int i = 0; i < get_act_fds; i++)
@@ -159,7 +164,8 @@ void tcp_server()
 				/*accept() */
 				if(-1 == (client_fd = accept(listen_fd,(struct sockaddr *)(&client_addr),&sin_size)))
 				{
-					printf("ACCEPT FAILED\n");
+					printf("ACCEPT FAILED    ");
+					printf("%s",server_time());
 					continue;
 				}
 				/*输出连接客户的ip和端口*/
@@ -174,7 +180,8 @@ void tcp_server()
 				/*设置非阻塞io*/
 				if( set_non_blocking(client_fd) != 0 )
 				{
-					printf("SET_NON_BLOCKING FAILED\n");
+					printf("SET_NON_BLOCKING FAILED    ");
+					printf("%s",server_time());
 					close(client_fd);
 					continue;
 				}
@@ -184,7 +191,8 @@ void tcp_server()
 				/*epoll_ctl() 描述符加入监听队列*/
 				if( epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &event_act) <0 )
 				{
-					printf("EPOLL_CTL ADD CLIENT FAILED\n");
+					printf("EPOLL_CTL ADD CLIENT FAILED    ");
+					printf("%s",server_time());
 					close(client_fd);
 					continue;
 				}
