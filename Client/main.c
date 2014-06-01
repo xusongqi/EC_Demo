@@ -13,12 +13,21 @@
 
 int main(void)
 {
-	char md5_str[33] = {'\0'};
-	unsigned char * str = "asdf";
+	char user_name[30];
+	unsigned char pwd[30];
+	char crypto_pwd[33] = {'\0'};
 	
-	md5((unsigned char *)str, md5_str);
+	while(1)
+	{
+		printf("your user name:\n");
+		scanf("%s",user_name);
+		printf("your password:\n");
 
-	printf("%s\n",md5_str);
+	}
+
+	md5((unsigned char *)pwd, crypto_pwd);
+
+	printf("%s\n",crypto_pwd);
 
 	return 0;
 }
