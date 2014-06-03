@@ -14,13 +14,13 @@
 
 #include "EC_client_include.h"
 
-char * md5(unsigned char * str, char * buff);
+char * encrypt(unsigned char * str, int pwd_len, char crypto[32]);
 
-char * md5(unsigned char * str, char * buff)
+char * encrypt(unsigned char * str, int pwd_len, char crypto[32])
 {
 	MD5_CTX ctx;
-	unsigned char md5[16] = {0};
 	char tmp[3]={'\0'};
+	unsigned char md5[16] = {0};
 	int i;
 
 	MD5_Init(&ctx);
@@ -29,14 +29,16 @@ char * md5(unsigned char * str, char * buff)
 
 	MD5_Final(md5, &ctx);
 
+	//MD5(str, strlen(str), md5);
+
 	for(i = 0; i<16; i++)
 	{
 		sprintf(tmp, "%02x", md5[i]);
-		strcat(buff, tmp);
+		strcat(crypto, tmp);
 	}
-	//printf("%s\n",buff);
+	printf("%s\n",crypto);
 
-	return buff;
+	return crypto;
 }
 
 #endif
