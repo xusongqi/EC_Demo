@@ -5,20 +5,21 @@
 * 
 * FileName:     server.h
 * 
-* Description:  
+* Description:  -lxml2 [因为包含了xml_include.h]
 *
 */
 #ifndef _SERVER_H_
 #define _SERVER_H_
 
-#include "EC_include.h"
+#include "xml_analyse.h"
 
 #define	LENGTH		1024
 #define	MAXEVENTS	1024
 
 char *	server_time();					//返回服务器的本地时间
 int		set_non_blocking(int sockfd);	//将传入的描述符设置为非阻塞
-int		client_request(int client_fd);		//处理客户请求
+int		client_request(int client_fd);	//处理客户请求
+int		tcp_server();					//服务端主程序
 
 char * server_time()
 {
@@ -61,6 +62,9 @@ int client_request(int client_fd)
 		printf("from %#x : %#x : ",
 					ntohl(client_addr.sin_addr.s_addr),ntohs(client_addr.sin_port));	
 		printf("%s\n",server_time());
+
+		msg_analyse(buffer, recbytes);	
+
 		return 0;
 	}
 	else
